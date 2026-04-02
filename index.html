@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tokenization Approaches — Compared</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1c2330;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #f97583;
+      --accent3: #56d364;
+      --word-color: #6495ed;
+      --char-color: #ff7f7f;
+      --bpe-color: #3cb371;
+      --heading: #f0f6fc;
+      --shadow: rgba(0,0,0,.4);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* --- Hero --- */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(88,166,255,.12) 0%, transparent 70%);
+      top: -150px; left: -150px;
+      animation: pulse 8s ease-in-out infinite alternate;
+    }
+    .hero::after {
+      content: '';
+      position: absolute;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(86,211,100,.08) 0%, transparent 70%);
+      bottom: -100px; right: -100px;
+      animation: pulse 10s ease-in-out infinite alternate-reverse;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: .6; }
+      100% { transform: scale(1.3); opacity: 1; }
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 4rem);
+      color: var(--heading);
+      margin-bottom: .6rem;
+      position: relative;
+    }
+    .hero p {
+      max-width: 640px;
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      position: relative;
+    }
+    .scroll-hint {
+      position: absolute;
+      bottom: 2rem;
+      animation: bounce 2s infinite;
+      font-size: 1.6rem;
+      color: var(--accent);
+      cursor: pointer;
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(10px); }
+    }
+
+    /* --- Shared Section --- */
+    section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 4rem 1.5rem;
+    }
+    h2 {
+      font-size: 2rem;
+      color: var(--heading);
+      margin-bottom: 1.2rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: .4rem;
+    }
+    h3 {
+      font-size: 1.35rem;
+      color: var(--accent);
+      margin: 1.4rem 0 .6rem;
+    }
+    p, li { margin-bottom: .7rem; }
+    ul { padding-left: 1.4rem; }
+    code {
+      background: var(--surface2);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: .92em;
+      color: var(--accent3);
+    }
+
+    /* --- Cards --- */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.6rem;
+      transition: transform .25s, box-shadow .25s;
+    }
+    .card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 8px 24px var(--shadow);
+    }
+    .card h3 { margin-top: 0; }
+    .card.word  { border-top: 3px solid var(--word-color); }
+    .card.char  { border-top: 3px solid var(--char-color); }
+    .card.bpe   { border-top: 3px solid var(--bpe-color); }
+    .badge {
+      display: inline-block;
+      font-size: .75rem;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: .5rem;
+    }
+    .badge.word  { background: var(--word-color); color: #000; }
+    .badge.char  { background: var(--char-color); color: #000; }
+    .badge.bpe   { background: var(--bpe-color);  color: #000; }
+
+    /* --- Interactive Demo --- */
+    .demo-area {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.6rem;
+      margin-top: 1.5rem;
+    }
+    .demo-area label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: .4rem;
+      color: var(--heading);
+    }
+    .demo-area textarea {
+      width: 100%;
+      min-height: 70px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: .7rem;
+      font-size: 1rem;
+      resize: vertical;
+      font-family: inherit;
+    }
+    .demo-area textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .token-output {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: .7rem;
+      min-height: 36px;
+    }
+    .token {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: .88rem;
+      font-family: 'Consolas', 'Courier New', monospace;
+      animation: fadeIn .3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(.85); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .token.word { background: rgba(100,149,237,.2); border: 1px solid var(--word-color); color: var(--word-color); }
+    .token.char { background: rgba(255,127,127,.15); border: 1px solid var(--char-color); color: var(--char-color); }
+    .token.bpe  { background: rgba(60,179,113,.15); border: 1px solid var(--bpe-color); color: var(--bpe-color); }
+    .token.oov  { opacity: .45; text-decoration: line-through; }
+    .method-tabs {
+      display: flex;
+      gap: .5rem;
+      margin-bottom: 1rem;
+    }
+    .method-tabs button {
+      padding: .45rem 1.1rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      color: var(--text);
+      font-size: .95rem;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+    .method-tabs button.active,
+    .method-tabs button:hover {
+      color: #fff;
+    }
+    .method-tabs button.active.word, .method-tabs button:hover.word { background: var(--word-color); }
+    .method-tabs button.active.char, .method-tabs button:hover.char { background: var(--char-color); }
+    .method-tabs button.active.bpe,  .method-tabs button:hover.bpe  { background: var(--bpe-color); }
+    .stat-line {
+      font-size: .9rem;
+      color: var(--text-muted);
+      margin-top: .5rem;
+    }
+    .stat-line span { color: var(--heading); font-weight: 600; }
+
+    /* --- Comparison Charts --- */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .chart-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.4rem;
+    }
+    .chart-box h3 { margin-top: 0; }
+    .bar-chart { margin-top: .8rem; }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: .55rem;
+    }
+    .bar-label {
+      width: 90px;
+      font-size: .85rem;
+      flex-shrink: 0;
+      text-align: right;
+      padding-right: .7rem;
+      color: var(--text-muted);
+    }
+    .bar-track {
+      flex: 1;
+      height: 22px;
+      background: var(--surface2);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width 1s ease;
+      display: flex;
+      align-items: center;
+      padding-left: 8px;
+      font-size: .75rem;
+      font-weight: 600;
+      color: #000;
+      white-space: nowrap;
+    }
+    .bar-fill.word { background: var(--word-color); }
+    .bar-fill.char { background: var(--char-color); }
+    .bar-fill.bpe  { background: var(--bpe-color); }
+
+    /* --- Comparison Table --- */
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+      font-size: .95rem;
+    }
+    .comparison-table th,
+    .comparison-table td {
+      padding: .7rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .comparison-table th {
+      color: var(--heading);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+    }
+    .comparison-table tr:hover td {
+      background: var(--surface2);
+    }
+    .pros { color: var(--accent3); }
+    .cons { color: var(--accent2); }
+
+    /* --- Code Block --- */
+    .code-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.2rem;
+      overflow-x: auto;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: .88rem;
+      line-height: 1.6;
+      margin-top: 1rem;
+      color: var(--text);
+      white-space: pre;
+      tab-size: 4;
+    }
+    .code-block code {
+      font-family: inherit;
+      font-size: inherit;
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+    .code-block .kw  { color: var(--accent2); }
+    .code-block .fn  { color: var(--accent); }
+    .code-block .str { color: var(--accent3); }
+    .code-block .cmt { color: var(--text-muted); font-style: italic; }
+
+    /* --- Footer --- */
+    footer {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--text-muted);
+      font-size: .85rem;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+    }
+
+    /* --- Scroll Animations --- */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ======================== HERO ======================== -->
+<div class="hero">
+  <h1>Tokenization in NLP</h1>
+  <p>Explore and compare three fundamental approaches to breaking text into tokens — the building blocks of every language model.</p>
+  <div class="scroll-hint" onclick="document.getElementById('overview').scrollIntoView({behavior:'smooth'})">&#8595;</div>
+</div>
+
+<!-- ======================== OVERVIEW ======================== -->
+<section id="overview" class="reveal">
+  <h2>What is Tokenization?</h2>
+  <p>
+    Before a language model can process text, the raw string must be split into
+    discrete units called <strong>tokens</strong>. The strategy used to create these
+    tokens profoundly affects <em>vocabulary size</em>, <em>sequence length</em>, and
+    the model's ability to handle <em>unseen words</em> (OOV — Out-Of-Vocabulary).
+  </p>
+  <p>
+    This page explores three popular tokenization strategies, using a German literary
+    corpus (<em>Selbstbetrachtungen</em> by Marcus Aurelius) as a running example.
+  </p>
+</section>
+
+<!-- ======================== THREE APPROACHES ======================== -->
+<section class="reveal">
+  <h2>The Three Approaches</h2>
+  <div class="cards">
+
+    <!-- Word -->
+    <div class="card word">
+      <span class="badge word">Word</span>
+      <h3>Word-Level Tokenization</h3>
+      <p>
+        The simplest strategy: split on whitespace and treat every unique word form
+        as a separate token.
+      </p>
+      <ul>
+        <li><span class="pros">✓</span> Semantically meaningful tokens</li>
+        <li><span class="pros">✓</span> Short sequences</li>
+        <li><span class="cons">✗</span> Huge vocabulary</li>
+        <li><span class="cons">✗</span> Cannot handle unseen words (high OOV)</li>
+      </ul>
+      <p class="stat-line">Vocab size on corpus: <span>≈ 3 649</span></p>
+    </div>
+
+    <!-- Character -->
+    <div class="card char">
+      <span class="badge char">Character</span>
+      <h3>Character-Level Tokenization</h3>
+      <p>
+        Each character in the text becomes its own token. The vocabulary is tiny
+        (the alphabet + punctuation) but sequences become very long.
+      </p>
+      <ul>
+        <li><span class="pros">✓</span> Tiny vocabulary</li>
+        <li><span class="pros">✓</span> Zero OOV — any text can be encoded</li>
+        <li><span class="cons">✗</span> Very long sequences</li>
+        <li><span class="cons">✗</span> Tokens lack semantic meaning</li>
+      </ul>
+      <p class="stat-line">Vocab size on corpus: <span>≈ 83</span></p>
+    </div>
+
+    <!-- BPE -->
+    <div class="card bpe">
+      <span class="badge bpe">BPE</span>
+      <h3>Subword (BPE) Tokenization</h3>
+      <p>
+        <strong>Byte Pair Encoding</strong> iteratively merges the most frequent
+        adjacent character pairs. The result is a balanced vocabulary of subword units.
+      </p>
+      <ul>
+        <li><span class="pros">✓</span> Balanced vocabulary size (configurable)</li>
+        <li><span class="pros">✓</span> Zero OOV</li>
+        <li><span class="pros">✓</span> Moderate sequence length</li>
+        <li><span class="cons">✗</span> More complex training step</li>
+      </ul>
+      <p class="stat-line">Vocab size on corpus: <span>≈ 1 000</span> (configurable via <code>num_merges</code>)</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ======================== HOW BPE WORKS ======================== -->
+<section class="reveal">
+  <h2>How BPE Works — Step by Step</h2>
+  <p>BPE starts from a character-level vocabulary and builds up subword units by repeatedly merging the most frequent pair:</p>
+  <ol style="padding-left:1.4rem">
+    <li>Split every word in the corpus into individual characters, appending a special end-of-word marker <code>&lt;/w&gt;</code>.</li>
+    <li>Count the frequency of every adjacent character pair across the vocabulary.</li>
+    <li>Merge the most frequent pair into a single new token.</li>
+    <li>Repeat steps 2–3 for <code>num_merges</code> iterations (e.g., 1 000 times).</li>
+  </ol>
+
+  <pre class="code-block"><code><span class="kw">class</span> <span class="fn">BPE</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, num_merges=<span class="str">1000</span>):
+        self.num_merges = num_merges
+        self.merges = []
+
+    <span class="kw">def</span> <span class="fn">fit</span>(self, corpus):
+        vocab = self.<span class="fn">_init_vocab</span>(corpus)          <span class="cmt"># char-level split</span>
+
+        <span class="kw">for</span> i <span class="kw">in</span> range(self.num_merges):
+            pairs = self.<span class="fn">_get_pair_stats</span>(vocab)    <span class="cmt"># count all pairs</span>
+            <span class="kw">if not</span> pairs:
+                <span class="kw">break</span>
+
+            best_pair = max(pairs, key=pairs.get)  <span class="cmt"># most frequent pair</span>
+
+            <span class="kw">if</span> pairs[best_pair] &lt; <span class="str">2</span>:              <span class="cmt"># stopping criterion</span>
+                <span class="kw">break</span>
+
+            self.merges.append(best_pair)
+            vocab = self.<span class="fn">_merge_pair</span>(best_pair, vocab)
+
+        self.vocab = vocab
+
+    <span class="kw">def</span> <span class="fn">tokenize</span>(self, word):
+        tokens = list(word) + [<span class="str">"&lt;/w&gt;"</span>]
+
+        <span class="kw">for</span> pair <span class="kw">in</span> self.merges:
+            <span class="cmt"># apply each learned merge rule in order</span>
+            ...
+
+        <span class="kw">return</span> tokens</code></pre>
+</section>
+
+<!-- ======================== INTERACTIVE DEMO ======================== -->
+<section class="reveal">
+  <h2>Interactive Demo</h2>
+  <p>Type or paste any text below to see how each method tokenizes it. <em>(This is a simplified client-side simulation.)</em></p>
+
+  <div class="demo-area">
+    <div class="method-tabs">
+      <button class="word active" data-method="word">Word</button>
+      <button class="char" data-method="char">Character</button>
+      <button class="bpe" data-method="bpe">BPE (simulated)</button>
+    </div>
+    <label for="demo-input">Input Text</label>
+    <textarea id="demo-input" placeholder="Die Welt ist schön, aber sie hat einen schweren Anfang.">Die Welt ist schön, aber sie hat einen schweren Anfang.</textarea>
+    <div class="stat-line" id="demo-stats"></div>
+    <div class="token-output" id="demo-output"></div>
+  </div>
+</section>
+
+<!-- ======================== COMPARISON CHARTS ======================== -->
+<section class="reveal">
+  <h2>Quantitative Comparison</h2>
+  <p>The three tokenization methods were applied to the same German literary corpus and then evaluated on three test sentences.</p>
+
+  <div class="chart-grid">
+
+    <!-- Vocab Size -->
+    <div class="chart-box">
+      <h3>Vocabulary Size</h3>
+      <div class="bar-chart" id="chart-vocab"></div>
+    </div>
+
+    <!-- Token Counts -->
+    <div class="chart-box">
+      <h3>Tokens per Sentence</h3>
+      <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.6rem;">
+        Test 1 (short) · Test 2 (medium) · Test 3 (long)
+      </p>
+      <div class="bar-chart" id="chart-tokens"></div>
+    </div>
+
+    <!-- OOV Rate -->
+    <div class="chart-box">
+      <h3>OOV Rate (Out-of-Vocabulary)</h3>
+      <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.6rem;">
+        Fraction of tokens that could <em>not</em> be found in the trained vocabulary.
+      </p>
+      <div class="bar-chart" id="chart-oov"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================== SUMMARY TABLE ======================== -->
+<section class="reveal">
+  <h2>Side-by-Side Summary</h2>
+  <div style="overflow-x:auto;">
+    <table class="comparison-table">
+      <thead>
+        <tr>
+          <th>Criterion</th>
+          <th style="color:var(--word-color)">Word</th>
+          <th style="color:var(--char-color)">Character</th>
+          <th style="color:var(--bpe-color)">BPE (Subword)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Vocabulary Size</td>
+          <td><span class="cons">Very large</span> (~3 649)</td>
+          <td><span class="pros">Tiny</span> (~83)</td>
+          <td><span class="pros">Configurable</span> (~1 000)</td>
+        </tr>
+        <tr>
+          <td>Sequence Length</td>
+          <td><span class="pros">Short</span></td>
+          <td><span class="cons">Very long</span></td>
+          <td>Moderate</td>
+        </tr>
+        <tr>
+          <td>OOV Handling</td>
+          <td><span class="cons">Poor</span> (up to 30 %)</td>
+          <td><span class="pros">None</span> (0 %)</td>
+          <td><span class="pros">None</span> (0 %)</td>
+        </tr>
+        <tr>
+          <td>Semantic Meaning</td>
+          <td><span class="pros">High</span></td>
+          <td><span class="cons">None</span></td>
+          <td>Partial</td>
+        </tr>
+        <tr>
+          <td>Complexity</td>
+          <td><span class="pros">Trivial</span></td>
+          <td><span class="pros">Trivial</span></td>
+          <td><span class="cons">Training required</span></td>
+        </tr>
+        <tr>
+          <td>Used in Practice</td>
+          <td>Rarely today</td>
+          <td>Some seq2seq models</td>
+          <td><span class="pros">GPT, LLaMA, etc.</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================== KEY TAKEAWAYS ======================== -->
+<section class="reveal">
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li><strong>Word tokenization</strong> yields short, meaningful sequences but struggles with unknown words and creates enormous vocabularies.</li>
+    <li><strong>Character tokenization</strong> eliminates the OOV problem entirely but produces very long sequences, making it harder for models to learn long-range patterns.</li>
+    <li><strong>BPE (subword) tokenization</strong> strikes the best balance: a tuneable vocabulary size, no OOV tokens, and moderate sequence lengths. This is why virtually all modern large language models (GPT, LLaMA, etc.) use subword methods.</li>
+  </ul>
+</section>
+
+<footer>
+  Built from a Jupyter Notebook exploring tokenization strategies &middot; 2026
+</footer>
+
+<script>
+// ===================== SCROLL REVEAL =====================
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.12 });
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// ===================== BAR CHARTS =====================
+function buildBars(containerId, rows) {
+  const container = document.getElementById(containerId);
+  const maxVal = Math.max(...rows.map(r => r.value));
+  rows.forEach(r => {
+    const pct = (r.value / maxVal * 100).toFixed(1);
+    const label = typeof r.value === 'number' && r.value < 1
+      ? (r.value * 100).toFixed(1) + ' %'
+      : r.value.toLocaleString();
+    container.innerHTML += `
+      <div class="bar-row">
+        <div class="bar-label">${r.label}</div>
+        <div class="bar-track">
+          <div class="bar-fill ${r.cls}" style="width:0%" data-width="${pct}">${label}</div>
+        </div>
+      </div>`;
+  });
+}
+
+// Vocab
+buildBars('chart-vocab', [
+  { label: 'Word',      value: 3649, cls: 'word' },
+  { label: 'Character', value: 83,   cls: 'char' },
+  { label: 'BPE',       value: 1000, cls: 'bpe'  },
+]);
+
+// Token counts (three sentences × three methods)
+buildBars('chart-tokens', [
+  { label: 'Word T1',  value: 10,  cls: 'word' },
+  { label: 'Word T2',  value: 13,  cls: 'word' },
+  { label: 'Word T3',  value: 36,  cls: 'word' },
+  { label: 'Char T1',  value: 55,  cls: 'char' },
+  { label: 'Char T2',  value: 98,  cls: 'char' },
+  { label: 'Char T3',  value: 197, cls: 'char' },
+  { label: 'BPE T1',   value: 32,  cls: 'bpe'  },
+  { label: 'BPE T2',   value: 52,  cls: 'bpe'  },
+  { label: 'BPE T3',   value: 126, cls: 'bpe'  },
+]);
+
+// OOV
+buildBars('chart-oov', [
+  { label: 'Word T1',  value: 0.30,  cls: 'word' },
+  { label: 'Word T2',  value: 0.077, cls: 'word' },
+  { label: 'Word T3',  value: 0.194, cls: 'word' },
+  { label: 'Char T1',  value: 0.001, cls: 'char' },
+  { label: 'Char T2',  value: 0.001, cls: 'char' },
+  { label: 'Char T3',  value: 0.001, cls: 'char' },
+  { label: 'BPE T1',   value: 0.001, cls: 'bpe'  },
+  { label: 'BPE T2',   value: 0.001, cls: 'bpe'  },
+  { label: 'BPE T3',   value: 0.001, cls: 'bpe'  },
+]);
+
+// Animate bars on scroll
+const barObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.bar-fill').forEach(b => {
+        b.style.width = b.dataset.width + '%';
+      });
+    }
+  });
+}, { threshold: 0.2 });
+document.querySelectorAll('.chart-box').forEach(el => barObserver.observe(el));
+
+// ===================== INTERACTIVE DEMO =====================
+const tabs = document.querySelectorAll('.method-tabs button');
+const inputEl = document.getElementById('demo-input');
+const outputEl = document.getElementById('demo-output');
+const statsEl = document.getElementById('demo-stats');
+let activeMethod = 'word';
+
+tabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeMethod = btn.dataset.method;
+    runDemo();
+  });
+});
+
+inputEl.addEventListener('input', runDemo);
+
+function runDemo() {
+  const text = inputEl.value;
+  let tokens = [];
+
+  if (activeMethod === 'word') {
+    tokens = text.replace(/[^\w\s\u00C0-\u024F]/g, ' ').split(/\s+/).filter(Boolean);
+  } else if (activeMethod === 'char') {
+    tokens = text.split('');
+  } else {
+    // simplified BPE simulation: split into 2-3 char subwords
+    tokens = [];
+    const words = text.split(/\s+/).filter(Boolean);
+    words.forEach(w => {
+      let i = 0;
+      while (i < w.length) {
+        const chunkSize = Math.min(2 + (w.charCodeAt(i) % 2), w.length - i);
+        tokens.push(w.substring(i, i + chunkSize));
+        i += chunkSize;
+      }
+    });
+  }
+
+  outputEl.innerHTML = '';
+  tokens.forEach((t, idx) => {
+    const span = document.createElement('span');
+    span.className = 'token ' + activeMethod;
+    span.textContent = t === ' ' ? '⎵' : t;
+    span.style.animationDelay = (idx * 0.03) + 's';
+    outputEl.appendChild(span);
+  });
+
+  statsEl.innerHTML = `Tokens: <span>${tokens.length}</span>`;
+}
+
+runDemo();
+</script>
+</body>
+</html>
