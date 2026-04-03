@@ -368,6 +368,12 @@
 <div class="hero">
   <h1>Tokenization in NLP</h1>
   <p>Explore and compare three fundamental approaches to breaking text into tokens — the building blocks of every language model.</p>
+  <div style="display:flex;gap:.8rem;margin-top:1.4rem;position:relative;flex-wrap:wrap;justify-content:center;">
+    <a href="Tokenization.ipynb" style="display:inline-flex;align-items:center;gap:.5rem;padding:.55rem 1.3rem;background:var(--surface);border:1px solid var(--accent);border-radius:8px;color:var(--accent);text-decoration:none;font-size:.95rem;transition:background .2s;" onmouseover="this.style.background='rgba(88,166,255,.12)'" onmouseout="this.style.background='var(--surface)'">
+      📓 Open Tokenization Notebook
+    </a>
+
+  </div>
   <div class="scroll-hint" onclick="document.getElementById('overview').scrollIntoView({behavior:'smooth'})">&#8595;</div>
 </div>
 
@@ -381,8 +387,10 @@
     the model's ability to handle <em>unseen words</em> (OOV — Out-Of-Vocabulary).
   </p>
   <p>
-    This page explores three popular tokenization strategies, using a German literary
-    corpus (<em>Selbstbetrachtungen</em> by Marcus Aurelius) as a running example.
+    This page explores three popular tokenization strategies, using an English literary
+    corpus (<em>The Meditations</em> by Marcus Aurelius, translated by George Long) as a running example.
+    Three test sentences &mdash; one English (short), one English (long), and one Spanish &mdash;
+    are used to evaluate each method.
   </p>
 </section>
 
@@ -405,7 +413,7 @@
         <li><span class="cons">✗</span> Huge vocabulary</li>
         <li><span class="cons">✗</span> Cannot handle unseen words (high OOV)</li>
       </ul>
-      <p class="stat-line">Vocab size on corpus: <span>≈ 3 649</span></p>
+      <p class="stat-line">Vocab size on corpus: <span>4 253</span></p>
     </div>
 
     <!-- Character -->
@@ -422,7 +430,7 @@
         <li><span class="cons">✗</span> Very long sequences</li>
         <li><span class="cons">✗</span> Tokens lack semantic meaning</li>
       </ul>
-      <p class="stat-line">Vocab size on corpus: <span>≈ 83</span></p>
+      <p class="stat-line">Vocab size on corpus: <span>74</span></p>
     </div>
 
     <!-- BPE -->
@@ -439,10 +447,61 @@
         <li><span class="pros">✓</span> Moderate sequence length</li>
         <li><span class="cons">✗</span> More complex training step</li>
       </ul>
-      <p class="stat-line">Vocab size on corpus: <span>≈ 1 000</span> (configurable via <code>num_merges</code>)</p>
+      <p class="stat-line">Vocab size on corpus: <span>1 043</span> unique tokens (after 1 000 merges) &middot; 0 % OOV</p>
     </div>
 
   </div>
+</section>
+
+
+<!-- ======================== TOKENIZER CODE ======================== -->
+<section class="reveal">
+  <h2>Tokenizer Implementations</h2>
+  <p>
+    The notebook builds each tokenizer from scratch in pure Python.
+    Below are the core snippets for the word-level and character-level approaches.
+  </p>
+
+  <!-- Word tokenizer -->
+  <h3 style="color:var(--word-color)">&#9632; Word-Level Tokenizer</h3>
+  <p>
+    Text is cleaned with a regex (keeping only letters, digits, and umlauts),
+    split on whitespace, and every unique word is assigned a numeric ID.
+    Lookup returns <code>None</code> for any word not seen during training.
+  </p>
+  <pre class="code-block"><code><span class="kw">import</span> re
+
+<span class="cmt"># Build vocabulary from corpus</span>
+cleaned = re.<span class="fn">sub</span>(<span class="str">r'[^a-zA-Z0-9\s]'</span>, <span class="str">' '</span>, text)
+cleaned = re.<span class="fn">sub</span>(<span class="str">r'\s+'</span>,          <span class="str">' '</span>, cleaned)
+
+vocab_word = {word: idx
+              <span class="kw">for</span> idx, word <span class="kw">in</span> <span class="fn">enumerate</span>(<span class="fn">set</span>(cleaned.<span class="fn">split</span>()))}
+
+<span class="cmt"># Tokenize a sentence  →  list of IDs (None = OOV)</span>
+sen_tokens = [vocab_word.<span class="fn">get</span>(word, <span class="str">None</span>)
+              <span class="kw">for</span> word <span class="kw">in</span> sentence.<span class="fn">split</span>()]
+
+<span class="cmt"># OOV rate</span>
+oov_rate = sen_tokens.<span class="fn">count</span>(<span class="str">None</span>) / <span class="fn">len</span>(sen_tokens)</code></pre>
+
+  <!-- Character tokenizer -->
+  <h3 style="color:var(--char-color)">&#9632; Character-Level Tokenizer</h3>
+  <p>
+    Every distinct character in the raw corpus receives an ID. Tokenization is
+    simply iterating over each character and looking it up &mdash; making OOV
+    practically impossible for in-domain text.
+  </p>
+  <pre class="code-block"><code><span class="cmt"># Build vocabulary from corpus (all unique chars)</span>
+vocab_char = {char: idx
+              <span class="kw">for</span> idx, char <span class="kw">in</span> <span class="fn">enumerate</span>(<span class="fn">set</span>(text))}
+
+<span class="cmt"># Tokenize a sentence  →  list of IDs (None = OOV)</span>
+char_tokens = [vocab_char.<span class="fn">get</span>(char, <span class="str">None</span>)
+               <span class="kw">for</span> char <span class="kw">in</span> sentence]
+
+<span class="cmt"># OOV rate  (will be ~0 for same-language text)</span>
+oov_rate = char_tokens.<span class="fn">count</span>(<span class="str">None</span>) / <span class="fn">len</span>(char_tokens)</code></pre>
 </section>
 
 <!-- ======================== HOW BPE WORKS ======================== -->
@@ -462,31 +521,39 @@
         self.merges = []
 
     <span class="kw">def</span> <span class="fn">fit</span>(self, corpus):
-        vocab = self.<span class="fn">_init_vocab</span>(corpus)          <span class="cmt"># char-level split</span>
+        vocab = self.<span class="fn">_init_vocab</span>(corpus)          <span class="cmt"># char-level split + &lt;/w&gt; marker</span>
 
         <span class="kw">for</span> i <span class="kw">in</span> range(self.num_merges):
-            pairs = self.<span class="fn">_get_pair_stats</span>(vocab)    <span class="cmt"># count all pairs</span>
-            <span class="kw">if not</span> pairs:
-                <span class="kw">break</span>
+            pairs = self.<span class="fn">_get_pair_stats</span>(vocab)    <span class="cmt"># count all adjacent pairs</span>
+            <span class="kw">if not</span> pairs: <span class="kw">break</span>
 
             best_pair = max(pairs, key=pairs.get)  <span class="cmt"># most frequent pair</span>
-
-            <span class="kw">if</span> pairs[best_pair] &lt; <span class="str">2</span>:              <span class="cmt"># stopping criterion</span>
-                <span class="kw">break</span>
+            <span class="kw">if</span> pairs[best_pair] &lt; <span class="str">2</span>: <span class="kw">break</span>        <span class="cmt"># stop criterion</span>
 
             self.merges.append(best_pair)
             vocab = self.<span class="fn">_merge_pair</span>(best_pair, vocab)
 
         self.vocab = vocab
 
-    <span class="kw">def</span> <span class="fn">tokenize</span>(self, word):
-        tokens = list(word) + [<span class="str">"&lt;/w&gt;"</span>]
-
-        <span class="kw">for</span> pair <span class="kw">in</span> self.merges:
-            <span class="cmt"># apply each learned merge rule in order</span>
+    <span class="kw">def</span> <span class="fn">tokenize</span>(self, text):
+        tokens = list(text) + [<span class="str">"&lt;/w&gt;"</span>]
+        <span class="kw">for</span> pair <span class="kw">in</span> self.merges:           <span class="cmt"># apply merge rules in order</span>
             ...
+        <span class="kw">return</span> tokens
 
-        <span class="kw">return</span> tokens</code></pre>
+
+<span class="cmt"># --- Training ---</span>
+corpus = list(vocab_word.keys())
+bpe = <span class="fn">BPE</span>(num_merges=<span class="str">1000</span>)
+bpe.<span class="fn">fit</span>(corpus)
+
+<span class="cmt"># --- Build token-to-ID mapping from the trained vocabulary ---</span>
+all_tokens = sorted(<span class="fn">set</span>(t <span class="kw">for</span> word <span class="kw">in</span> bpe.vocab.keys() <span class="kw">for</span> t <span class="kw">in</span> word))
+vocab_bpe = {token: idx <span class="kw">for</span> idx, token <span class="kw">in</span> <span class="fn">enumerate</span>(all_tokens)}
+
+<span class="cmt"># --- Tokenize &amp; look up IDs (None = OOV) ---</span>
+bpe_tokens   = bpe.<span class="fn">tokenize</span>(sentence)
+bpe_token_ids = [vocab_bpe.<span class="fn">get</span>(t, <span class="str">None</span>) <span class="kw">for</span> t <span class="kw">in</span> bpe_tokens]</code></pre>
 </section>
 
 <!-- ======================== INTERACTIVE DEMO ======================== -->
@@ -501,7 +568,7 @@
       <button class="bpe" data-method="bpe">BPE (simulated)</button>
     </div>
     <label for="demo-input">Input Text</label>
-    <textarea id="demo-input" placeholder="Die Welt ist schön, aber sie hat einen schweren Anfang.">Die Welt ist schön, aber sie hat einen schweren Anfang.</textarea>
+    <textarea id="demo-input" placeholder="Sometimes even to live is an act of courage.">Sometimes even to live is an act of courage.</textarea>
     <div class="stat-line" id="demo-stats"></div>
     <div class="token-output" id="demo-output"></div>
   </div>
@@ -510,7 +577,7 @@
 <!-- ======================== COMPARISON CHARTS ======================== -->
 <section class="reveal">
   <h2>Quantitative Comparison</h2>
-  <p>The three tokenization methods were applied to the same German literary corpus and then evaluated on three test sentences.</p>
+  <p>The three tokenization methods were applied to the same literary corpus and then evaluated on three test sentences.</p>
 
   <div class="chart-grid">
 
@@ -524,7 +591,7 @@
     <div class="chart-box">
       <h3>Tokens per Sentence</h3>
       <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:.6rem;">
-        Test 1 (short) · Test 2 (medium) · Test 3 (long)
+        Test&nbsp;1: short English · Test&nbsp;2: long English · Test&nbsp;3: Spanish
       </p>
       <div class="bar-chart" id="chart-tokens"></div>
     </div>
@@ -556,9 +623,9 @@
       <tbody>
         <tr>
           <td>Vocabulary Size</td>
-          <td><span class="cons">Very large</span> (~3 649)</td>
-          <td><span class="pros">Tiny</span> (~83)</td>
-          <td><span class="pros">Configurable</span> (~1 000)</td>
+          <td><span class="cons">Very large</span> (4 253)</td>
+          <td><span class="pros">Tiny</span> (74)</td>
+          <td><span class="pros">Configurable</span> (1 043)</td>
         </tr>
         <tr>
           <td>Sequence Length</td>
@@ -568,7 +635,7 @@
         </tr>
         <tr>
           <td>OOV Handling</td>
-          <td><span class="cons">Poor</span> (up to 30 %)</td>
+          <td><span class="cons">Poor</span> (up to 94 %)</td>
           <td><span class="pros">None</span> (0 %)</td>
           <td><span class="pros">None</span> (0 %)</td>
         </tr>
@@ -637,35 +704,35 @@ function buildBars(containerId, rows) {
 
 // Vocab
 buildBars('chart-vocab', [
-  { label: 'Word',      value: 3649, cls: 'word' },
-  { label: 'Character', value: 83,   cls: 'char' },
-  { label: 'BPE',       value: 1000, cls: 'bpe'  },
+  { label: 'Word',      value: 4253, cls: 'word' },
+  { label: 'Character', value: 74,   cls: 'char' },
+  { label: 'BPE',       value: 1043, cls: 'bpe'  },
 ]);
 
 // Token counts (three sentences × three methods)
 buildBars('chart-tokens', [
-  { label: 'Word T1',  value: 10,  cls: 'word' },
-  { label: 'Word T2',  value: 13,  cls: 'word' },
-  { label: 'Word T3',  value: 36,  cls: 'word' },
-  { label: 'Char T1',  value: 55,  cls: 'char' },
-  { label: 'Char T2',  value: 98,  cls: 'char' },
-  { label: 'Char T3',  value: 197, cls: 'char' },
-  { label: 'BPE T1',   value: 32,  cls: 'bpe'  },
-  { label: 'BPE T2',   value: 52,  cls: 'bpe'  },
-  { label: 'BPE T3',   value: 126, cls: 'bpe'  },
+  { label: 'Word T1',  value: 9,   cls: 'word' },
+  { label: 'Word T2',  value: 71,  cls: 'word' },
+  { label: 'Word T3',  value: 16,  cls: 'word' },
+  { label: 'Char T1',  value: 44,  cls: 'char' },
+  { label: 'Char T2',  value: 391, cls: 'char' },
+  { label: 'Char T3',  value: 88,  cls: 'char' },
+  { label: 'BPE T1',   value: 16,  cls: 'bpe'  },
+  { label: 'BPE T2',   value: 139, cls: 'bpe'  },
+  { label: 'BPE T3',   value: 36,  cls: 'bpe'  },
 ]);
 
 // OOV
 buildBars('chart-oov', [
-  { label: 'Word T1',  value: 0.30,  cls: 'word' },
-  { label: 'Word T2',  value: 0.077, cls: 'word' },
-  { label: 'Word T3',  value: 0.194, cls: 'word' },
-  { label: 'Char T1',  value: 0.001, cls: 'char' },
-  { label: 'Char T2',  value: 0.001, cls: 'char' },
-  { label: 'Char T3',  value: 0.001, cls: 'char' },
-  { label: 'BPE T1',   value: 0.001, cls: 'bpe'  },
-  { label: 'BPE T2',   value: 0.001, cls: 'bpe'  },
-  { label: 'BPE T3',   value: 0.001, cls: 'bpe'  },
+  { label: 'Word T1',  value: 0.222,  cls: 'word' },
+  { label: 'Word T2',  value: 0.197,  cls: 'word' },
+  { label: 'Word T3',  value: 0.938,  cls: 'word' },
+  { label: 'Char T1',  value: 0.0,    cls: 'char' },
+  { label: 'Char T2',  value: 0.0,    cls: 'char' },
+  { label: 'Char T3',  value: 0.045,  cls: 'char' },
+  { label: 'BPE T1',   value: 0.0,    cls: 'bpe'  },
+  { label: 'BPE T2',   value: 0.0,    cls: 'bpe'  },
+  { label: 'BPE T3',   value: 0.0,    cls: 'bpe'  },
 ]);
 
 // Animate bars on scroll
